@@ -114,7 +114,7 @@ func NewProcess(ID string, healthCheckTimeout int, config config.ModelConfig, pr
 		processLogger:           processLogger,
 		proxyLogger:             proxyLogger,
 		healthCheckTimeout:      healthCheckTimeout,
-		healthCheckLoopInterval: 5 * time.Second, /* default, can not be set by user - used for testing */
+		healthCheckLoopInterval: 250 * time.Millisecond, /* default, can not be set by user - used for testing */
 		state:                   StateStopped,
 
 		// concurrency limit
@@ -122,7 +122,7 @@ func NewProcess(ID string, healthCheckTimeout int, config config.ModelConfig, pr
 
 		// To be removed when migration over exec.CommandContext is complete
 		// stop timeout
-		gracefulStopTimeout: 10 * time.Second,
+		gracefulStopTimeout: time.Second,
 		cmdWaitChan:         make(chan struct{}),
 	}
 }
@@ -289,7 +289,7 @@ func (p *Process) start() error {
 	// 3. The health check passes
 	//
 	// only in the third case will the process be considered Ready to accept
-	<-time.After(250 * time.Millisecond) // give process a bit of time to start
+	<-time.After(50 * time.Millisecond) // give process a tiny bit of time to start
 
 	checkStartTime := time.Now()
 	maxDuration := time.Second * time.Duration(p.healthCheckTimeout)
@@ -409,7 +409,7 @@ func (p *Process) Shutdown() {
 }
 
 // stopCommand will send a SIGTERM to the process and wait for it to exit.
-// If it does not exit within 5 seconds, it will send a SIGKILL.
+// If it does not exit quickly (default 1 second), it will send a SIGKILL.
 func (p *Process) stopCommand() {
 	stopStartTime := time.Now()
 	defer func() {
@@ -526,7 +526,7 @@ func (p *Process) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 				// Wait for statusUpdates goroutine to finish writing its deferred "Done!" messages
 				// before closing the connection. Without this, the connection would close before
 				// the goroutine can write its cleanup messages, causing incomplete SSE output.
-				srw.waitForCompletion(100 * time.Millisecond)
+				srw.waitForCompletion(50 * time.Millisecond)
 			} else {
 				http.Error(w, errstr, http.StatusBadGateway)
 			}
@@ -552,7 +552,7 @@ func (p *Process) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 
 	if srw != nil {
 		// Wait for the goroutine to finish writing its final messages
-		const completionTimeout = 1 * time.Second
+		const completionTimeout = 200 * time.Millisecond
 		if !srw.waitForCompletion(completionTimeout) {
 			p.proxyLogger.Warnf("<%s> status updates goroutine did not complete within %v, proceeding with proxy request", p.ID, completionTimeout)
 		}
@@ -728,7 +728,6 @@ func newStatusResponseWriter(p *Process, w http.ResponseWriter) *statusResponseW
 	s.Header().Set("Cache-Control", "no-cache")         // no-cache
 	s.Header().Set("Connection", "keep-alive")          // keep-alive
 	s.WriteHeader(http.StatusOK)                        // send status code 200
-	s.sendLine("━━━━━")
 	s.sendLine(fmt.Sprintf("llama-swap loading model: %s", p.ID))
 	return s
 }
@@ -749,7 +748,6 @@ func (s *statusResponseWriter) statusUpdates(ctx context.Context) {
 	defer func() {
 		duration := time.Since(s.start)
 		s.sendLine(fmt.Sprintf("\nDone! (%.2fs)", duration.Seconds()))
-		s.sendLine("━━━━━")
 		s.sendLine(" ")
 	}()
 

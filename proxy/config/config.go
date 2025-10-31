@@ -184,9 +184,9 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 		return Config{}, err
 	}
 
-	if config.HealthCheckTimeout < 15 {
-		// set a minimum of 15 seconds
-		config.HealthCheckTimeout = 15
+	if config.HealthCheckTimeout < 5 {
+		// set a minimum of 5 seconds
+		config.HealthCheckTimeout = 5
 	}
 
 	if config.StartPort < 1 {
